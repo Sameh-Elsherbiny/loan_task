@@ -1,0 +1,91 @@
+version: '3.8'
+
+networks:
+  app_network:
+
+volumes:
+  mysql_data:
+  mysql_logs:
+  django_logs:
+
+services:
+  django:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: django_app:latest
+    container_name: django_app
+    volumes:
+      - django_logs:/app/logs
+      - .:/app
+      - .env:/app/.env:ro
+    restart: always
+    environment:
+      - ENV_FILE=/app/.env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mysql
+      - redis
+      - celery
+      - celery-beat
+    networks:
+      - app_network
+
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    ports:
+      - 3306:3306
+    environment:
+      - MYSQL_DATABASE=Loan
+      - MYSQL_HOSTNAME=mysql
+      - MYSQL_PASSWORD=123456
+      - MYSQL_PORT=3306
+      - MYSQL_ROOT_PASSWORD=123456
+    volumes:
+      - /root/mysql/my.cnf:/etc/mysql/mysql.conf.d/mysqld.cnf:ro
+      - mysql_data:/var/lib/mysql
+      - mysql_logs:/var/log/mysql
+    restart: always
+    networks:
+      - app_network
+
+  redis:
+    container_name: redis
+    image: 'bitnami/redis:latest'
+    ports:
+      - "6379:6379"
+    networks:
+      - app_network
+
+  celery:
+    build: .
+    container_name: celery
+    restart: always
+    command: celery -A your_health_project worker --loglevel=info
+    depends_on:
+      - redis
+    volumes:
+      - .:/app
+      - .env:/app/.env:ro
+    environment:
+      - ENV_FILE=/app/.env
+    networks:
+      - app_network
+
+  celery-beat:
+    build: .
+    container_name: celery-beat
+    restart: always
+    command: celery -A your_health_project beat --loglevel=info
+    depends_on:
+      - redis
+      - celery
+    volumes:
+      - .:/app
+      - .env:/app/.env:ro
+    environment:
+      - ENV_FILE=/app/.env
+    networks:
+      - app_network
